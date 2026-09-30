@@ -1,0 +1,76 @@
+# MonSense — Docker Compose
+# Full-stack deployment with PostgreSQL/PostGIS, Redis, Backend, and Frontend
+# — Ananya Deshmukh (DevOps & Cloud Infrastructure Engineer)
+# — Om Pandey (Lead Architect)
+
+version: '3.9'
+
+services:
+  # ─── PostgreSQL + PostGIS ──────────────────────────────────────────
+  db:
+    image: postgis/postgis:15-3.4
+    container_name: monsense-db
+    environment:
+      POSTGRES_DB: monsense_db
+      POSTGRES_USER: monsense
+      POSTGRES_PASSWORD: monsense
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U monsense -d monsense_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis Cache ───────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: monsense-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Backend (FastAPI) ─────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: monsense-backend
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://monsense:monsense@db:5432/monsense_db
+      - REDIS_URL=redis://redis:6379/0
+      - DEBUG=true
+      - ALLOWED_ORIGINS=http://localhost:5173,http://localhost:80,http://localhost:3000
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ─── Frontend (React + Vite) ──────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: monsense-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
