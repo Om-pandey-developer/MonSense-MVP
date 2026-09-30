@@ -66,7 +66,7 @@ class ClimateIndices:
         rng = cls._date_rng(target_date, "mjo")
         phase = ((day_of_year // 5) % 8) + 1
         amplitude = abs(rng.normal(1.2, 0.5))
-        return int(phase), round(float(amplitude), 2)
+        return phase, round(float(amplitude), 2)
 
 
 class MockDataGenerator:
