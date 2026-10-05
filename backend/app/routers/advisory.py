@@ -120,3 +120,37 @@ async def generate_bulk_advisories(
         "total_blocks": len(results),
         "blocks": results,
     }
+
+
+@router.post("/simulate")
+async def simulate_advisory_scenario(
+    rainfall_mm: float = Query(default=65.0, ge=0.0, le=500.0),
+    dry_spell_days: int = Query(default=2, ge=0, le=60),
+    crop: str = Query(default="rice"),
+    crop_stage: str = Query(default="flowering"),
+    heavy_rainfall_prob: Optional[float] = None,
+    flood_risk_prob: Optional[float] = None,
+    lead_days: int = Query(default=7, ge=1, le=30),
+):
+    """Simulate crop-specific advisories based on hypothetical forecast parameters."""
+    advisories = advisory_engine.simulate_from_params(
+        rainfall_mm=rainfall_mm,
+        dry_spell_days=dry_spell_days,
+        crop=crop,
+        crop_stage=crop_stage,
+        heavy_rainfall_prob=heavy_rainfall_prob or 0.0,
+        flood_risk_prob=flood_risk_prob or 0.0,
+        lead_days=lead_days,
+    )
+    return {
+        "simulation_parameters": {
+            "rainfall_mm": rainfall_mm,
+            "dry_spell_days": dry_spell_days,
+            "crop": crop,
+            "crop_stage": crop_stage,
+            "lead_days": lead_days,
+        },
+        "total_advisories": len(advisories),
+        "advisories": advisories,
+    }
+

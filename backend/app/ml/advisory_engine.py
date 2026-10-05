@@ -162,13 +162,15 @@ class CropAdvisoryEngine:
         crop_name: str,
         forecast: Dict,
         current_date: Optional[date] = None,
+        crop_stage: Optional[str] = None,
     ) -> List[Dict]:
         """Generate advisories for a single crop based on forecast data."""
         if current_date is None:
             current_date = date.today()
 
         crop = self.crop_db.get(crop_name, self.crop_db.get("rice"))
-        crop_stage = self._get_crop_stage(crop_name, current_date)
+        if not crop_stage:
+            crop_stage = self._get_crop_stage(crop_name, current_date)
         advisories = []
 
         rainfall = forecast.get("predicted_rainfall_mm", 0)
@@ -326,6 +328,38 @@ class CropAdvisoryEngine:
             all_advisories.extend(advisories)
         return all_advisories
 
+    def simulate_from_params(
+        self,
+        rainfall_mm: float,
+        dry_spell_days: int = 0,
+        crop: str = "rice",
+        crop_stage: str = "flowering",
+        heavy_rainfall_prob: float = 0.0,
+        flood_risk_prob: float = 0.0,
+        lead_days: int = 7,
+    ) -> List[Dict]:
+        """Simulate dynamic advisories from user-controlled agronomic parameters."""
+        r = float(rainfall_mm)
+        d = int(dry_spell_days)
+        heavy_p = float(heavy_rainfall_prob or (80.0 if r >= 65 else 45.0 if r >= 35 else 10.0))
+        dry_p = float(min(100.0, d * 14.0) if d > 0 else 5.0)
+        flood_p = float(flood_risk_prob or (70.0 if r >= 70 else 35.0 if r >= 45 else 10.0))
+
+        risk_category = "very_high" if r >= 70 or d >= 10 else "high" if r >= 50 or d >= 6 else "moderate" if r >= 30 or d >= 3 else "low"
+
+        forecast = {
+            "predicted_rainfall_mm": r,
+            "lead_days": lead_days,
+            "target_date": date.today().isoformat(),
+            "heavy_rainfall_prob": heavy_p,
+            "dry_spell_prob": dry_p,
+            "monsoon_onset_prob": 50.0 if crop_stage == "pre_sowing" else 0.0,
+            "flood_risk_prob": flood_p,
+            "risk_category": risk_category,
+        }
+        return self.generate_advisory(crop_name=crop, forecast=forecast, crop_stage=crop_stage)
+
 
 # Singleton
 advisory_engine = CropAdvisoryEngine()
+

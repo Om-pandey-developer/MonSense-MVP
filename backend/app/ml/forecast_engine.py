@@ -12,11 +12,13 @@ Architecture:
 """
 
 import numpy as np
+import math
 from datetime import date, timedelta
 from typing import List, Dict, Optional, Tuple
 import logging
 import hashlib
 import json
+from app.services.weather_service import weather_service
 
 logger = logging.getLogger(__name__)
 
@@ -133,11 +135,17 @@ class MockDataGenerator:
         # IOD effect (Positive IOD → enhanced rainfall)
         iod_effect = 1.0 + 0.1 * iod_val
 
+        # Synoptic weather wave (11-14 day active-break spells) + convective pulses
+        day_of_year = target_date.timetuple().tm_yday
+        synoptic_wave = math.sin((day_of_year / 13.0) * 2.0 * math.pi) * (base_rainfall * 0.45)
+        convective_pulse = math.sin((day_of_year / 3.8) * 2.0 * math.pi + (seed % 7)) * (base_rainfall * 0.28)
+
         # Compute predicted rainfall
         predicted = (
-            base_rainfall * state_mult * elev_mult * lead_factor
+            (base_rainfall + synoptic_wave + convective_pulse)
+            * state_mult * elev_mult * lead_factor
             * enso_effect * iod_effect
-            + rng.normal(0, base_rainfall * 0.2)
+            + rng.normal(0, base_rainfall * 0.18)
         )
         predicted = max(0, predicted)
 
@@ -255,6 +263,84 @@ class ForecastEngine:
             location_code, state_name, latitude, longitude,
             elevation_m, target_date, lead_days
         )
+
+    async def predict_with_live_weather(
+        self,
+        location_code: str,
+        state_name: str,
+        latitude: float,
+        longitude: float,
+        elevation_m: float,
+        target_date: date,
+        lead_days: int = 7,
+    ) -> Dict:
+        """Predict using live Open-Meteo weather API with downscaling."""
+        weather_data = await weather_service.fetch_weather(latitude, longitude, days=min(lead_days, 16))
+        if not weather_data or "daily" not in weather_data:
+            logger.info("Open-Meteo unavailable, falling back to simulator")
+            return await self.predict(location_code, state_name, latitude, longitude, elevation_m, target_date, lead_days)
+
+        try:
+            daily = weather_data["daily"]
+            precip_list = daily.get("precipitation_sum", [])
+            day_idx = min(max(0, lead_days - 1), len(precip_list) - 1)
+            live_precip = float(precip_list[day_idx]) if precip_list else 10.0
+
+            enso_val, enso_phase = ClimateIndices.get_enso_nino34(target_date)
+            iod_val, iod_phase = ClimateIndices.get_iod_dmi(target_date)
+            mjo_phase, mjo_amp = ClimateIndices.get_mjo(target_date)
+
+            enso_effect = 1.0 - 0.15 * enso_val
+            iod_effect = 1.0 + 0.1 * iod_val
+            elev_mult = 1.0 + (elevation_m / 2000.0) * 0.5 if elevation_m else 1.0
+
+            blended_rainfall = max(0.0, live_precip * enso_effect * iod_effect * (elev_mult ** 0.5))
+
+            uncertainty = blended_rainfall * (0.1 + lead_days * 0.015)
+            lower = max(0.0, blended_rainfall - uncertainty)
+            upper = blended_rainfall + uncertainty
+            confidence = max(0.4, min(0.96, 0.92 - lead_days * 0.015))
+
+            heavy_threshold = 40.0
+            heavy_prob = min(100.0, max(0.0, (blended_rainfall / heavy_threshold) * 65.0))
+            dry_prob = min(100.0, max(0.0, 100.0 - (blended_rainfall / 15.0) * 80.0 if blended_rainfall < 15.0 else 5.0))
+            flood_prob = min(100.0, max(0.0, heavy_prob * 0.75 + (1.0 - min(elevation_m or 100, 500) / 500) * 15.0))
+
+            max_prob = max(heavy_prob, flood_prob)
+            if max_prob >= 70:
+                risk = "very_high"
+            elif max_prob >= 50:
+                risk = "high"
+            elif max_prob >= 30:
+                risk = "moderate"
+            elif max_prob >= 10:
+                risk = "low"
+            else:
+                risk = "very_low"
+
+            return {
+                "predicted_rainfall_mm": round(blended_rainfall, 1),
+                "rainfall_lower_bound": round(lower, 1),
+                "rainfall_upper_bound": round(upper, 1),
+                "prediction_confidence": round(confidence, 3),
+                "heavy_rainfall_prob": round(heavy_prob, 1),
+                "dry_spell_prob": round(dry_prob, 1),
+                "monsoon_onset_prob": 45.0,
+                "flood_risk_prob": round(flood_prob, 1),
+                "risk_category": risk,
+                "model_version": "2.1.0-live-meteo",
+                "model_type": "Open-Meteo NWP + Downscaling Ensemble",
+                "source": "Open-Meteo API (Live)",
+                "enso_value": enso_val,
+                "enso_phase": enso_phase,
+                "iod_value": iod_val,
+                "iod_phase": iod_phase,
+                "mjo_phase": mjo_phase,
+                "mjo_amplitude": mjo_amp,
+            }
+        except Exception as e:
+            logger.warning(f"Error blending live weather: {e}")
+            return await self.predict(location_code, state_name, latitude, longitude, elevation_m, target_date, lead_days)
 
     async def predict_batch(
         self,

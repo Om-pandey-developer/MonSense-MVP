@@ -259,3 +259,24 @@ class ForecastTimeSeries(BaseModel):
     unit: str
     data: List[TimeSeriesPoint]
     prediction_start: date
+
+
+# ─── Simulation Schemas ──────────────────────────────────────────────────
+
+class AdvisorySimulationRequest(BaseModel):
+    """Payload for interactive crop scenario advisory simulation."""
+    rainfall_mm: float = Field(default=65.0, ge=0.0, le=500.0)
+    dry_spell_days: int = Field(default=2, ge=0, le=60)
+    crop: str = Field(default="rice")
+    crop_stage: str = Field(default="flowering")
+    heavy_rainfall_prob: Optional[float] = None
+    flood_risk_prob: Optional[float] = None
+    lead_days: int = Field(default=7, ge=1, le=30)
+
+
+class BroadcastSimulationRequest(BaseModel):
+    """Payload for mobile alert dispatch simulation."""
+    district_code: str = Field(default="MH-PUN")
+    channel: str = Field(default="all")
+    lead_days: int = Field(default=2, ge=1, le=14)
+

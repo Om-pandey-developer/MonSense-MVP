@@ -72,6 +72,12 @@ async def get_hierarchy():
     return {"hierarchy": tree}
 
 
+@router.get("/hierarchy-with-bounds")
+async def get_hierarchy_with_bounds(state_code: Optional[str] = Query(default=None, description="State code filter like MH, KA, GJ, MP, PB, UP")):
+    """Get full location hierarchy with bounding box coordinates for GIS maps."""
+    return location_service.get_hierarchy_with_bounds(state_code=state_code)
+
+
 @router.get("/districts")
 async def list_districts(
     state_id: Optional[str] = None,

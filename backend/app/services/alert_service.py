@@ -177,6 +177,45 @@ class AlertService:
         """Get most recent alerts."""
         return self.sent_alerts[-limit:]
 
+    async def simulate_broadcast(
+        self,
+        district_code: str = "MH-PUN",
+        channel: str = "all",
+    ) -> Dict:
+        """Simulate real-time broadcast with timeline for mobile UI simulator."""
+        farmers = list(self.farmers.values())
+        dispatched = []
+        for i, f in enumerate(farmers):
+            ch = "whatsapp" if (channel == "whatsapp" or (channel == "all" and i % 2 == 1)) else "sms"
+            lang = f.get("language_preference", "hi")
+            msg = (
+                "⚠️ मान्सून अलर्ट: पुढील ४८ तासांत मुसळधार पाऊस (>६५ मिमी). शेतात पाण्याचा निचरा करा."
+                if lang == "mr"
+                else "⚠️ मॉनसेंस अलर्ट: अगले 48 घंटों में भारी बारिश (>65mm)। खेत से जल निकासी सुनिश्चित करें।"
+            )
+            dispatched.append({
+                "farmer_id": f["id"],
+                "farmer_name": f["name"],
+                "phone": f["phone"],
+                "channel": ch,
+                "language": lang,
+                "status": "delivered",
+                "message": msg,
+                "sent_at": datetime.utcnow().isoformat(),
+            })
+
+        return {
+            "broadcast_id": f"BC-{len(self.sent_alerts) + 1:04d}",
+            "district_code": district_code,
+            "channel": channel,
+            "total_sent": len(dispatched),
+            "sms_count": sum(1 for d in dispatched if d["channel"] == "sms"),
+            "whatsapp_count": sum(1 for d in dispatched if d["channel"] == "whatsapp"),
+            "delivery_rate": "100%",
+            "dispatched_timeline": dispatched,
+        }
+
 
 # Singleton
 alert_service = AlertService()
+

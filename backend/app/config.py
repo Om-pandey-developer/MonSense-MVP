@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     ERA5_CDS_URL: str = "https://cds.climate.copernicus.eu/api/v2"
     GPM_IMERG_URL: str = "https://gpm1.gesdisc.eosdis.nasa.gov"
     CDS_API_KEY: Optional[str] = None
+    OPEN_METEO_URL: str = "https://api.open-meteo.com/v1/forecast"
+    WEATHER_API_TIMEOUT: int = 5
 
     # Alert Services
     TWILIO_ACCOUNT_SID: Optional[str] = None

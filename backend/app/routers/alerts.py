@@ -100,3 +100,13 @@ async def get_recent_alerts(
     """Get recent alert history."""
     alerts = alert_service.get_recent_alerts(limit)
     return {"total": len(alerts), "alerts": alerts}
+
+
+@router.post("/trigger-broadcast")
+async def trigger_broadcast_simulation(
+    district_code: str = Query(default="MH-PUN"),
+    channel: str = Query(default="all"),
+):
+    """Simulate complete emergency broadcast with timeline for mobile UI simulator."""
+    return await alert_service.simulate_broadcast(district_code, channel)
+

@@ -70,6 +70,16 @@ class TestForecastEngine:
         assert 0 <= result["dry_spell_prob"] <= 100
         assert 0 <= result["prediction_confidence"] <= 1
 
+    @pytest.mark.asyncio
+    async def test_predict_with_live_weather_fallback(self):
+        engine = ForecastEngine()
+        res = await engine.predict_with_live_weather(
+            "MH-PUN-BAR", "Maharashtra", 18.15, 74.58, 550, date.today() + timedelta(days=2), 2
+        )
+        assert "predicted_rainfall_mm" in res
+        assert "risk_category" in res
+        assert res["predicted_rainfall_mm"] >= 0
+
 
 # ─── Climate Indices Tests ──────────────────────────────────────────────
 
@@ -163,6 +173,13 @@ class TestAdvisoryEngine:
         for crop in expected:
             assert crop in CROP_DATABASE
 
+    def test_simulate_from_params(self):
+        advisories = self.engine.simulate_from_params(
+            rainfall_mm=75.0, dry_spell_days=0, crop="rice", crop_stage="flowering"
+        )
+        assert len(advisories) > 0
+        assert any(a["severity"] in ("critical", "warning") for a in advisories)
+
 
 # ─── Location Service Tests ─────────────────────────────────────────────
 
@@ -197,6 +214,15 @@ class TestLocationService:
         assert len(results) >= 1
         assert any(r["name"] == "Baramati" for r in results)
 
+    def test_hierarchy_with_bounds(self):
+        h = self.service.get_hierarchy_with_bounds()
+        assert "state" in h
+        assert "districts" in h
+        assert "blocks" in h
+        assert len(h["districts"]) > 0
+        assert "bounds" in h["districts"][0]
+        assert len(h["districts"][0]["bounds"]) == 2
+
 
 # ─── Alert Service Tests ────────────────────────────────────────────────
 
@@ -225,6 +251,14 @@ class TestAlertService:
         stats = self.service.get_alert_stats()
         assert "total_alerts" in stats
         assert "delivery_rate" in stats
+
+    @pytest.mark.asyncio
+    async def test_simulate_broadcast(self):
+        res = await self.service.simulate_broadcast("MH-PUN", "all")
+        assert "broadcast_id" in res
+        assert "dispatched_timeline" in res
+        assert len(res["dispatched_timeline"]) > 0
+        assert res["delivery_rate"] == "100%"
 
 
 if __name__ == "__main__":

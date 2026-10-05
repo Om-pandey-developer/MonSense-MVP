@@ -52,6 +52,7 @@ export const api = {
     return fetchAPI(url);
   },
   getLocationHierarchy: () => fetchAPI('/locations/hierarchy'),
+  getLocationHierarchyWithBounds: () => fetchAPI('/locations/hierarchy-with-bounds'),
   getDistricts: () => fetchAPI('/locations/districts'),
   getBlocks: (districtId = null) => {
     let url = '/locations/blocks';
@@ -66,6 +67,8 @@ export const api = {
     fetchAPI(`/advisory/generate/${locationCode}?crops=${crops}&lead_days=${leadDays}`),
   getBulkAdvisories: (districtCode, crops = 'rice,soybean', leadDays = 7) =>
     fetchAPI(`/advisory/bulk/${districtCode}?crops=${crops}&lead_days=${leadDays}`),
+  simulateAdvisory: (payload) =>
+    fetchAPI('/advisory/simulate', { method: 'POST', body: JSON.stringify(payload) }),
 
   // Alerts
   getFarmers: (locationId = null) => {
@@ -77,6 +80,8 @@ export const api = {
     fetchAPI(`/alerts/send?phone=${phone}&message=${encodeURIComponent(message)}&channel=${channel}&language=${language}`, { method: 'POST' }),
   broadcastAlert: (locationCode, channel = 'sms', crops = 'rice,soybean') =>
     fetchAPI(`/alerts/broadcast/${locationCode}?channel=${channel}&crops=${crops}`, { method: 'POST' }),
+  triggerBroadcast: (payload) =>
+    fetchAPI('/alerts/trigger-broadcast', { method: 'POST', body: JSON.stringify(payload) }),
   getAlertStats: () => fetchAPI('/alerts/stats'),
   getRecentAlerts: (limit = 20) => fetchAPI(`/alerts/recent?limit=${limit}`),
 };
